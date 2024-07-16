@@ -15,6 +15,7 @@ dependencies = [
   "click",
   "configparser",
   "feedgen",
+  "feedparser",
   "flask_flatpages",
   "frozen-flask",
   "Flask-Babel",
