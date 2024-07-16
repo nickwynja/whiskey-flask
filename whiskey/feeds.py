@@ -9,6 +9,7 @@ from flask import url_for, Response, redirect, send_from_directory
 from pytz import timezone
 from feedgen.feed import FeedGenerator
 from pathlib import Path
+import hashlib
 
 
 @app.route('/rss')
@@ -67,34 +68,22 @@ def log():
 
     for file in files:
         with open(file) as f:
-            d = Path(f.name).stem
-            t = datetime.datetime.strptime(d, '%Y%m%d%H%M%S%z')
-            l = f.read()
-            i = {
-                    "filename": f.name,
-                    "date": d,
-                    "timestamp": t,
-                    "content": l,
-                }
-            p.append(i)
+            p.append({
+                "filename": f.name,
+                "date": Path(f.name).stem,
+                "content": f.read(),
+                })
 
-    try:
-        latest_post = p[-1]['timestamp']
-    except (KeyError, IndexError) as e:
-        latest_post = None
+
+    latest_hash = hashlib.md5(str(p).encode()).hexdigest()
 
     try:
         cached_xml = feedparser.parse(f"{app.config['STATIC_FOLDER']}/{cache_name}")
-        cached_time = datetime.datetime.strptime(cached_xml['feed']['updated'], "%a, %d %b %Y %H:%M:%S %z")
+        cached_hash = cached_xml['feed']['generator'].split(":")[1]
     except KeyError as e:
-        cached_time = None
+        cached_hash = None
 
-    if (
-            cached_time is None
-            or latest_post is None
-            or latest_post > cached_time):
-
-        ## update feed
+    if latest_hash != cached_hash:
         feed = FeedGenerator()
         feed.title(f"{app.config.get('AUTHOR')}'s Log")
         feed.link(href=app.config['BASE_URL'] + url_for('log'), rel='self')
@@ -102,13 +91,12 @@ def log():
         feed.author(name=app.config.get('AUTHOR', ""))
         feed.id(feed.title())
         feed.link(href=app.config['BASE_URL'], rel='alternate')
-        feed.lastBuildDate(latest_post)
-
+        feed.generator(generator=f"whiskey-feed-cache:{latest_hash}")
 
         for i in p:
             entry = feed.add_entry()
             entry.id(i['date'].split("-")[0])
-            entry.published(i['timestamp'])
+            entry.published(i['date'])
             entry.author(name=app.config.get('AUTHOR', ""))
             if Path(i['filename']).suffix == ".md":
                 entry.content(pypandoc.convert_text(i['content'], 'html', format='md'), type="html")
