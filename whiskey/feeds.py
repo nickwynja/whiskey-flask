@@ -88,7 +88,7 @@ def log():
         feed = FeedGenerator()
         feed.title(f"{app.config.get('AUTHOR')}'s Log")
         feed.link(href=app.config['BASE_URL'] + url_for('log'), rel='self')
-        feed.subtitle(page.meta.get('description'), "")
+        feed.subtitle(page.meta.get('description', app.config.get("DESCRIPTION")))
         feed.author(name=app.config.get('AUTHOR', ""))
         feed.id(feed.title())
         feed.link(href=app.config['BASE_URL'], rel='alternate')
