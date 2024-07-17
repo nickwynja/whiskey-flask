@@ -25,10 +25,9 @@ def feed():
 
     feed = FeedGenerator()
     feed.title('%s' % app.config['TITLE'])
-    feed.link(href=app.config['BASE_URL'] + url_for('feed'), rel='self')
+    feed.link(href=app.config['BASE_URL'], rel='self')
     feed.subtitle(app.config.get('DESCRIPTION', ""))
     feed.author(name=app.config.get('AUTHOR', ""))
-    feed.link(href=app.config['BASE_URL'], rel='alternate')
 
     for p in posts[:10]:
         post = flatpages.get(p.path)
@@ -87,11 +86,10 @@ def log():
     if latest_hash != cached_hash:
         feed = FeedGenerator()
         feed.title(f"{app.config.get('AUTHOR')}'s Log")
-        feed.link(href=app.config['BASE_URL'] + url_for('log'), rel='self')
+        feed.link(href=app.config['BASE_URL'] + "/log.html", rel='self')
         feed.subtitle(page.meta.get('description', app.config.get("DESCRIPTION")))
         feed.author(name=app.config.get('AUTHOR', ""))
         feed.id(feed.title())
-        feed.link(href=app.config['BASE_URL'], rel='alternate')
         feed.generator(generator=f"whiskey-feed-cache:{latest_hash}")
 
         for i in reversed(p):
