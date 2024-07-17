@@ -93,7 +93,7 @@ def log():
         feed.link(href=app.config['BASE_URL'], rel='alternate')
         feed.generator(generator=f"whiskey-feed-cache:{latest_hash}")
 
-        for i in p:
+        for i in reversed(p):
             entry = feed.add_entry()
             entry.id(i['date'].split("-")[0])
             entry.published(i['date'])
