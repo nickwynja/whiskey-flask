@@ -63,7 +63,12 @@ def get_latest_log():
         date = Path(f.name).stem
         content = f.read()
         if Path(f.name).suffix == ".md":
-            entry = pypandoc.convert_text(content, 'html', format='md')
+            entry = pypandoc.convert_text(
+                    content,
+                    'html',
+                    format='md',
+                    extra_args=app.config['PANDOC_ARGS']
+                    )
         else:
             entry = l
 

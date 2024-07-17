@@ -62,6 +62,7 @@ def feed():
 @app.route('/log.xml')
 def log():
     files = sorted(glob.glob("./content/data/log/*"))
+    page = flatpages.get("log")
     cache_name = "log.xml"
 
     p = []
@@ -87,7 +88,7 @@ def log():
         feed = FeedGenerator()
         feed.title(f"{app.config.get('AUTHOR')}'s Log")
         feed.link(href=app.config['BASE_URL'] + url_for('log'), rel='self')
-        feed.subtitle(app.config.get('DESCRIPTION', ""))
+        feed.subtitle(page.meta.get('description'), "")
         feed.author(name=app.config.get('AUTHOR', ""))
         feed.id(feed.title())
         feed.link(href=app.config['BASE_URL'], rel='alternate')
@@ -99,7 +100,15 @@ def log():
             entry.published(i['date'])
             entry.author(name=app.config.get('AUTHOR', ""))
             if Path(i['filename']).suffix == ".md":
-                entry.content(pypandoc.convert_text(i['content'], 'html', format='md'), type="html")
+                entry.content(pypandoc.convert_text(
+                    i['content'],
+                    'html',
+                    format='md',
+                    extra_args=app.config['PANDOC_ARGS']
+                    ), type="html")
+
+
+
             else:
                 entry.content(i['content'], type="html")
 
