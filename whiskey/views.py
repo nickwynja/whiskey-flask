@@ -6,6 +6,7 @@ import threading
 import pypandoc
 import yaml
 import glob
+import datetime
 from pathlib import Path
 from rclone_python import rclone
 from random import randrange
@@ -275,6 +276,25 @@ if app.config['SITE_STYLE'] in ("blog", "hybrid"):
 
         return render_template('log.html', page=page, entry=entry, date=date,
                                site=app.config)
+
+    @app.route("/log.txt")
+    def log_txt():
+        files = sorted(glob.glob("./content/data/log/*"))
+        txt = ""
+
+        for file in files:
+            with open(file) as f:
+                d = datetime.datetime.strptime(Path(f.name).stem, '%Y%m%d%H%M%S%z')
+                txt += f"""## {d}
+
+{f.read()}
+
+
+"""
+
+        resp = Response(txt)
+        resp.headers['Content-Type'] = 'text/plain'
+        return resp
 
     @app.route("/archive.html")
     @app.route("/%s/index.html" % app.config['POST_DIRECTORY'])
