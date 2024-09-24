@@ -285,16 +285,28 @@ if app.config['SITE_STYLE'] in ("blog", "hybrid"):
         for file in files:
             with open(file) as f:
                 d = datetime.datetime.strptime(Path(f.name).stem, '%Y%m%d%H%M%S%z')
+                # app.logger.debug(Path(f.name).suffix)
+                if Path(f.name).suffix == ".md":
+                    t = pypandoc.convert_text(
+                            f.read(),
+                            'markdown_github',
+                            format='markdown',
+                            extra_args=app.config['PANDOC_ARGS']
+                            )
+                else:
+                    t = pypandoc.convert_text(
+                            f.read(),
+                            'markdown_github',
+                            format='html',
+                            extra_args=app.config['PANDOC_ARGS']
+                            )
                 txt += f"""## {d}
 
-{f.read()}
-
+{t}
 
 """
 
-        resp = Response(txt)
-        resp.headers['Content-Type'] = 'text/plain'
-        return resp
+        return txt, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
     @app.route("/archive.html")
     @app.route("/%s/index.html" % app.config['POST_DIRECTORY'])
