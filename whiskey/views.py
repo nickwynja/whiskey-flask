@@ -7,6 +7,7 @@ import pypandoc
 import yaml
 import glob
 import datetime
+import hashlib
 from pathlib import Path
 from rclone_python import rclone
 from random import randrange
@@ -280,33 +281,57 @@ if app.config['SITE_STYLE'] in ("blog", "hybrid"):
     @app.route("/log.txt")
     def log_txt():
         files = sorted(glob.glob("./content/data/log/*"))
+        entries = []
         txt = ""
 
         for file in files:
             with open(file) as f:
-                d = datetime.datetime.strptime(Path(f.name).stem, '%Y%m%d%H%M%S%z')
-                # app.logger.debug(Path(f.name).suffix)
-                if Path(f.name).suffix == ".md":
-                    t = pypandoc.convert_text(
-                            f.read(),
-                            'markdown_github',
-                            format='markdown',
-                            extra_args=app.config['PANDOC_ARGS']
-                            )
-                else:
-                    t = pypandoc.convert_text(
-                            f.read(),
-                            'markdown_github',
-                            format='html',
-                            extra_args=app.config['PANDOC_ARGS']
-                            )
-                txt += f"""## {d}
+                entries.append({
+                    'date': datetime.datetime.strptime(Path(f.name).stem, '%Y%m%d%H%M%S%z'),
+                    'filename': f.name,
+                    'text': f.read(),
+                    })
+
+        latest_hash = hashlib.md5(str(entries).encode()).hexdigest()
+        cached_txt = f"{app.config['STATIC_FOLDER']}/log.txt.{latest_hash}"
+
+        if os.path.isfile(cached_txt):
+            with open(cached_txt) as f:
+                txt = f.read()
+            return txt, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+        else:
+            for e in entries:
+                    if Path(e['filename']).suffix == ".md":
+                        t = pypandoc.convert_text(
+                                e['text'],
+                                'markdown_github',
+                                format='markdown',
+                                extra_args=app.config['PANDOC_ARGS']
+                                )
+                    else:
+                        t = pypandoc.convert_text(
+                                e['text'],
+                                'markdown_github',
+                                format='html',
+                                extra_args=app.config['PANDOC_ARGS']
+                                )
+                    txt += f"""## {e['date'].strftime("%Y-%m-%d %a %H:%M:%S%z")}
 
 {t}
 
 """
 
-        return txt, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+            caches_to_remove = glob.glob(f"{app.config['STATIC_FOLDER']}/log.txt.*")
+
+            for c in caches_to_remove:
+                os.remove(c)
+
+            with open(cached_txt, 'w+') as f:
+                f.write(txt)
+
+            return txt, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+
 
     @app.route("/archive.html")
     @app.route("/%s/index.html" % app.config['POST_DIRECTORY'])
