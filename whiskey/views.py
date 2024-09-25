@@ -315,7 +315,7 @@ if app.config['SITE_STYLE'] in ("blog", "hybrid"):
                                 format='html',
                                 extra_args=app.config['PANDOC_ARGS']
                                 )
-                    txt += f"""## {e['date'].strftime("%Y-%m-%d %a %H:%M:%S%z")}
+                    txt += f"""## {e['date'].strftime("%a %b %d %Y %H:%M:%S %z")}
 
 {t}
 
