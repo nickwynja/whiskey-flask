@@ -282,7 +282,8 @@ if app.config['SITE_STYLE'] in ("blog", "hybrid"):
     def log_txt():
         files = sorted(glob.glob("./content/data/log/*"))
         entries = []
-        txt = ""
+        formatted = []
+
 
         for file in files:
             with open(file) as f:
@@ -301,25 +302,25 @@ if app.config['SITE_STYLE'] in ("blog", "hybrid"):
             return txt, 200, {'Content-Type': 'text/plain; charset=utf-8'}
         else:
             for e in entries:
-                    if Path(e['filename']).suffix == ".md":
-                        t = pypandoc.convert_text(
-                                e['text'],
-                                'markdown_github',
-                                format='markdown',
-                                extra_args=app.config['PANDOC_ARGS']
-                                )
-                    else:
-                        t = pypandoc.convert_text(
-                                e['text'],
-                                'markdown_github',
-                                format='html',
-                                extra_args=app.config['PANDOC_ARGS']
-                                )
-                    txt += f"""## {e['date'].strftime("%a %b %d %Y %H:%M:%S %z")}
+                if Path(e['filename']).suffix == ".md":
+                    t = pypandoc.convert_text(
+                            e['text'],
+                            'markdown_github',
+                            format='markdown',
+                            extra_args=app.config['PANDOC_ARGS']
+                            )
+                else:
+                    t = pypandoc.convert_text(
+                            e['text'],
+                            'markdown_github',
+                            format='html',
+                            extra_args=app.config['PANDOC_ARGS']
+                            )
 
-{t}
+                formatted.append(f"## {e['date'].strftime('%a %b %d %Y %H:%M:%S %z')}\n\n{t}")
 
-"""
+            txt = "\n\n".join(formatted)
+
 
             caches_to_remove = glob.glob(f"{app.config['STATIC_FOLDER']}/log.txt.*")
 
