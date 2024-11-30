@@ -21,7 +21,6 @@ yaml.add_representer(literal_unicode, literal_unicode_representer)
 
 
 def freeze_to_build(skip_existing):
-    app.config['PUBLISH_MODE'] = True
     app.config.update(FREEZER_SKIP_EXISTING=skip_existing)
 
     pages = [u for u in freezer.all_urls()]
@@ -50,16 +49,6 @@ def freeze_to_build(skip_existing):
             pass
         print("frozen!")
 
-
-def add_update(text, featured):
-    d = datetime.datetime.now()
-    fname = f"{app.config['DATA_PATH']}/updates/{d.strftime('%Y%m%d%H%M%S')}.yaml"
-    u = {"date": d.replace(microsecond=0),
-          "featured": featured,
-          "text": literal_unicode(text)}
-
-    with open(fname, "w") as f:
-        yaml.dump(u, f, default_flow_style=False)
 
 def add_entry():
     n = datetime.datetime.now().astimezone().strftime("%Y%m%d%H%M%S%z")

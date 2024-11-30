@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whiskey-flask"
+authors = [
+    {name = "Nick Wynja", email = "nick@nickwynja.com"},
+]
+description = "Whiskey makes writing happen"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+  "flask ~= 2.3",
+  "click",
+  "configparser",
+  "feedgen",
+  "feedparser",
+  "flask_flatpages",
+  "frozen-flask",
+  "Flask-Babel",
+  "Jinja2",
+  "Markdown",
+  "MarkupSafe",
+  "panflute",
+  "Pygments",
+  "pytz",
+  "python-dotenv",
+  "pypandoc",
+  "xhtml2pdf",
+  "gunicorn",
+  "ttf-opensans",
+  "flask-compress",
+  "rclone-python",
+]
+version = "1.0.0beta"

@@ -4,32 +4,45 @@ import os
 import tarfile
 import pypandoc
 import datetime
+import shutil
+import json
+import re
 from flask import abort
 from flask_babel import format_datetime
 from whiskey import app, flatpages
 from pathlib import Path
+from webdav3.client import Client
+from webdav3.exceptions import RemoteResourceNotFound
+from rclone_python import rclone
+from rclone_python.remote_types import RemoteTypes
 
 
 def get_posts():
     '''returns list of published posts ordered newest first'''
+    all_posts = []
     posts = [p for p in flatpages
-             if (p.path.startswith(app.config['POST_DIRECTORY'])
-                 and is_published(p)
-                 and not is_hidden(p))
-             ]
+        if (p.path.startswith(app.config['POST_DIRECTORY'])
+            and is_published(p)
+            and not is_archived(p))]
     posts.sort(key=lambda item: item['date'], reverse=True)
-    for idx, p in enumerate(posts):
-        slug = p.path.replace('{}/'.format(app.config['POST_DIRECTORY']), '')
-        setattr(posts[idx], 'slug', slug)
-        setattr(posts[idx], 'year', p['date'].strftime('%Y'))
-    return posts
+    for p in posts:
+        d = os.path.dirname(p.path)
+        slug = os.path.basename(p.path)
+        if re.compile(r'\d{4}').search(d):
+            path = d.removeprefix(app.config['POST_DIRECTORY'])
+        else:
+            path = app.config['POST_DIRECTORY']
+
+        setattr(p, 'page_path', path)
+        setattr(p, 'slug', slug)
+        setattr(p, 'year', p['date'].strftime('%Y'))
+        all_posts.append(p)
+    return all_posts
 
 
-def get_featured_posts():
+def get_featured_posts(posts):
     '''returns list of posts marked `featured` in post metadata'''
-    all_posts = get_posts()
-    return [p for p in all_posts if 'featured' in p.meta and p.meta['featured']
-            is True]
+    return [p for p in posts if p.meta and p.meta.get('featured', False) is True]
 
 
 def pandoc_markdown(md):
@@ -41,7 +54,6 @@ def pandoc_markdown(md):
     )
 
 def get_latest_log():
-    updates = []
     files = sorted(glob.glob(f"{app.config['DATA_PATH']}/log/*"))
 
     if len(files) == 0:
@@ -51,34 +63,16 @@ def get_latest_log():
         date = Path(f.name).stem
         content = f.read()
         if Path(f.name).suffix == ".md":
-            entry = pypandoc.convert_text(content, 'html', format='md')
+            entry = pypandoc.convert_text(
+                    content,
+                    'html',
+                    format='md',
+                    extra_args=app.config['PANDOC_ARGS']
+                    )
         else:
             entry = l
 
     return (date,entry)
-
-def get_updates(featured=False):
-    updates = []
-    featured_updates = []
-    files = sorted(glob.glob(f"{app.config['DATA_PATH']}/updates/*.yaml"))
-
-    for file in files:
-        with open(file, 'r') as stream:
-            try:
-                y = yaml.safe_load(stream)
-                y['filename'] = file
-                if y.get('published', True) is True:
-                    updates.append(y)
-                if y.get('featured', False) is True:
-                    featured_updates.append(y)
-            except yaml.YAMLError as exc:
-                print(exc)
-
-    if featured:
-        return featured_updates
-
-    return updates
-
 
 def format_date(value):
     '''takes a date obj and returns in November 22, 2016 format'''
@@ -98,9 +92,9 @@ def is_published(post):
     return post and 'published' in post.meta and post.meta['published'] is True
 
 
-def is_hidden(post):
+def is_archived(post):
     '''returns True/False based on `hidden` metadata in post'''
-    return post and 'hidden' in post.meta and post.meta['hidden'] is True
+    return post and 'archived' in post.meta and post.meta['archived'] is True
 
 
 def is_published_or_draft(post):
@@ -172,3 +166,151 @@ def get_flatfile_or_404(file):
 def make_tarfile(output_filename, source_dir):
     with tarfile.open(output_filename, "w:gz") as tar:
         tar.add(source_dir, arcname=os.path.basename(source_dir))
+
+
+def pull_content():
+    client = Client(app.config["WEBDAV_ARGS"])
+    status = get_sync_status()
+
+    try:
+        os.mkdir(app.config['CONTENT_PATH'])
+    except FileExistsError:
+        pass
+
+    if app.config['CONTENT_IN_PROGRESS'] is not True:
+        init_pull_config()
+        file_list = []
+        try:
+            all_files = client.list(app.config["WEBDAV_DIR"],
+                                    get_info=True,
+                                    recursive=True,
+                                    )
+        except RemoteResourceNotFound as e:
+            app.config["CONTENT_IN_PROGRESS"] = False
+            app.logger.error(e)
+            return False
+
+
+        for f in all_files:
+            if f['isdir'] is False:
+                if status["CONTENT_LAST_PULL"] is not None:
+                    date_modified = datetime.datetime.strptime(
+                            f['modified'], "%a, %d %b %Y %H:%M:%S %Z")
+                    # get everything with changes within the last 1h to avoid races
+                    if date_modified > (status["CONTENT_LAST_PULL"] - datetime.timedelta(hours=1)):
+                        app.logger.debug(f"{f['name']} modified at {date_modified}")
+                        file_list.append(f)
+                else:
+                    file_list.append(f)
+            else:
+                dir_name = f['path'].removeprefix("/" + app.config["WEBDAV_DIR"])
+
+                try:
+                    os.mkdir(app.config["CONTENT_PATH"] + dir_name)
+                except FileExistsError:
+                    pass
+
+        file_list.sort(key=lambda f: f['modified'], reverse=True)
+
+        if file_list != []:
+            from multiprocessing.dummy import Pool as ThreadPool
+            pool = ThreadPool(4)
+            results = pool.map(download_item, file_list)
+            app.logger.info(f"pull complete")
+        else:
+            app.logger.info("no content changes to pull")
+
+
+        close_pull_config()
+
+
+def download_item(item):
+    client = Client(app.config["WEBDAV_ARGS"])
+
+    rel_path = item['path'].removeprefix(
+            "/" + app.config["WEBDAV_DIR"])
+
+    local_path = app.config['CONTENT_PATH'] + rel_path
+
+    app.logger.debug(f"downloading {rel_path}")
+
+    kwargs = {
+            'remote_path': item['path'],
+            'local_path':  local_path,
+            }
+    client.download_sync(**kwargs)
+    flatpages.reload()
+    return True
+
+def get_all_remote_files():
+    client = Client(app.config["WEBDAV_ARGS"])
+    file_list = []
+
+    try:
+        all_files = client.list(app.config["WEBDAV_DIR"],
+                                get_info=True,
+                                recursive=True,
+                                )
+    except RemoteResourceNotFound as e:
+        app.logger.error(e)
+        return []
+
+    for f in all_files:
+        if f['isdir'] is False:
+            file_list.append(f['path'].removeprefix("/" + app.config["WEBDAV_DIR"]))
+    return file_list
+
+
+def store_sync_status():
+    with open (f"{app.config['SITE_PATH']}/sync.json", 'w') as conf:
+        conf.write(json.dumps({
+            "CONTENT_LAST_PULL": str(app.config["CONTENT_LAST_PULL"]),
+            "INITIAL_CONTENT_PULLED": app.config["INITIAL_CONTENT_PULLED"],
+            }))
+
+def get_sync_status():
+    default_status =  {
+            "CONTENT_LAST_PULL": app.config["CONTENT_LAST_PULL"],
+            "INITIAL_CONTENT_PULLED": app.config["INITIAL_CONTENT_PULLED"],
+            }
+
+    try:
+        with open (f"{app.config['SITE_PATH']}/sync.json", 'r') as conf:
+            f = conf.read()
+            if f:
+                status = json.loads(f)
+                status["CONTENT_LAST_PULL"] = datetime.datetime.strptime(
+                        status["CONTENT_LAST_PULL"],
+                        "%Y-%m-%d %H:%M:%S.%f")
+                return status
+            else:
+                return default_status
+    except FileNotFoundError as e:
+        app.logger.info("no sync status yet")
+        return default_status
+
+def init_pull_config():
+    status = get_sync_status()
+    app.logger.info("pull initiated")
+    app.config["INITIAL_CONTENT_PULLED"] = False
+    app.config["CONTENT_IN_PROGRESS"] = True
+    app.logger.debug(f"last pull at: {status['CONTENT_LAST_PULL']}")
+
+def close_pull_config():
+    app.config["CONTENT_LAST_PULL"] = datetime.datetime.utcnow()
+    app.config["INITIAL_CONTENT_PULLED"] = True
+    app.config["CONTENT_IN_PROGRESS"] = False
+    store_sync_status()
+
+def rclone_content():
+    if app.config['CONTENT_IN_PROGRESS'] is not True:
+        init_pull_config()
+
+        rclone.copy(
+                f"fastmail:{app.config['WEBDAV_DIR']}",
+                app.config['CONTENT_PATH'],
+                ignore_existing=True, args=['--create-empty-src-dirs'])
+
+        app.logger.info(f"pull complete")
+        flatpages.reload()
+        close_pull_config()

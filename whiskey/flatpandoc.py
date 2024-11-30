@@ -18,7 +18,8 @@ License: MIT
 import pkg_resources
 import pypandoc
 
-from flask import render_template_string, Markup
+from flask import render_template_string
+from markupsafe import Markup
 
 try:
     __version__ = pkg_resources.require("Flask-FlatPages-Pandoc")[0]

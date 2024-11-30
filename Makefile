@@ -2,12 +2,10 @@ prep:
 	python3 -m pip install --user --upgrade setuptools wheel twine readme_renderer
 
 pack:
-	rm -rf dist/*
-	python3 setup.py sdist bdist_wheel
+	python3 -m build
 
 check: pack
-	twine check dist/*
-	python3 -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+	python3 -m twine check dist/*
 
 dist: pack
 	python3 -m twine upload dist/*

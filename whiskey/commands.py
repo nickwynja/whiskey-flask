@@ -51,28 +51,6 @@ def reload():
     server.watch(app.config['CONTENT_PATH'])
     server.serve(host='0.0.0.0', port=5001, debug=True)
 
-
-# @app.cli.command()
-# def deploy():
-#     """Deploys site using rsync"""
-#     execute(tasks.deploy_using_rsync)
-
-
-# @app.cli.command()
-# def backup():
-#     """Backs up site to local server"""
-#     execute(tasks.backup_using_fabric()
-
-
-@app.cli.command()
-@click.option('-f', '--featured',
-              is_flag=True,
-              default=False)
-@click.argument('text', required=True)
-def update(text, featured):
-    """Adds a status update from command line"""
-    tasks.add_update(text, featured)
-
 @app.cli.command()
 def log():
     """Creates log entry"""
