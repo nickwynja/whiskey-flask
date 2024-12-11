@@ -11,6 +11,8 @@ import hashlib
 from pathlib import Path
 from rclone_python import rclone
 from random import randrange
+from xhtml2pdf import pisa
+import ttf_opensans
 from whiskey import app, flatpages
 
 from whiskey import helpers
@@ -120,86 +122,26 @@ def nested_content(name, ext, dir=None, year=None, month=None):
             except:
                 abort(404)
 
-@app.route('/cv.pdf')
+@app.route('/cv.html')
 def cv():
-    p = flatpages.get('cv')
+    with open(app.config['CONTENT_PATH'] + "/data/cv.yaml", "r") as stream:
+        cv = yaml.safe_load(stream)
 
+    return render_template("cv.html", cv=cv, site=app.config)
+
+@app.route('/resume.pdf')
+def resume():
     try:
-        html =  pypandoc.convert_file(
-             "%s/cv.md" % app.config['CONTENT_PATH'],
-            'html',
-            format=app.config['PANDOC_MD_FORMAT'],
-            filters=app.config['PANDOC_FILTERS_RESUME'],
-            extra_args=app.config['PANDOC_ARGS']
-        )
+        with open(app.config['CONTENT_PATH'] + "/data/cv.yaml", "r") as stream:
+            cv = yaml.safe_load(stream)
     except:
         abort(404)
 
-    # font_config = FontConfiguration()
-    try:
-        with open(f"{app.config['STATIC_FOLDER']}/css/cv.css", "r") as f:
-            css = f.read()
-    except FileNotFoundError as e:
-        css = ""
+    source_html = render_template("resume.html",
+                                  cv=cv,
+                                  font=ttf_opensans
+                                  )
 
-    import ttf_opensans
-
-    open_sans_regular = ttf_opensans.OPENSANS_REGULAR
-    open_sans_bold = ttf_opensans.OPENSANS_BOLD
-    open_sans_italic = ttf_opensans.OPENSANS_ITALIC
-    open_sans_bolditalic = ttf_opensans.OPENSANS_BOLDITALIC
-
-
-    fonts = """
-@font-face {{
-font-family: "Open Sans";
-src: url({regular});
-}}
-
-@font-face {{
-font-family: "Open Sans";
-src: url({bold});
-font-weight: bold;
-}}
-
-@font-face {{
-font-family: "Open Sans";
-src: url({italic});
-font-style: italic;
-}}
-
-@font-face {{
-font-family: "Open Sans";
-src: url({bold_italic});
-font-weight: bold;
-font-style: italic;
-}}
-""".format(
-    regular=open_sans_regular.path,
-    bold=open_sans_bold.path,
-    italic=open_sans_italic.path,
-    bold_italic=open_sans_bolditalic.path,
-    )
-
-    source_html = f"""
-    <head>
-    <title>{app.config['AUTHOR']}'s CV</title>
-    <style>
-    {fonts}
-    {css}
-    </style>
-    </head>
-    <body>
-    <h1>{app.config['AUTHOR']}</h1>
-    <div class="header">
-        {"&nbsp;&nbsp;&bull;&nbsp;&nbsp;".join(f"{x}" for x in p.meta.get('header', {}))}
-    </div>
-    {html}
-    <div id="footer_content" class="footer"><pdf:pagenumber>&nbsp;of <pdf:pagecount>&nbsp;</div>
-    </body>
-    """
-
-    from xhtml2pdf import pisa
     output_filename = f"{app.config['STATIC_FOLDER']}/cv.pdf"
     result_file = open(output_filename, "w+b")
     pisa_status = pisa.CreatePDF(source_html, dest=result_file)
